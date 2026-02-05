@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asana Photography Scheduler</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <h1>Asana Photography Scheduler</h1>
+            <div class="header-actions">
+                <span id="auth-status" class="auth-status">Not connected</span>
+                <button id="login-btn" class="btn btn-primary">Connect to Asana</button>
+                <button id="logout-btn" class="btn btn-secondary" style="display: none;">Disconnect</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Top Progress Bar (for geocoding) -->
+    <div id="top-progress-bar" class="top-progress-bar" style="display: none;">
+        <div class="top-progress-content">
+            <span id="top-progress-text" class="top-progress-text">Processing...</span>
+            <div class="top-progress-track">
+                <div id="top-progress-fill" class="top-progress-fill"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PAT Login Modal -->
+    <div id="pat-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>Connect with Personal Access Token</h2>
+            <p>Enter your Asana Personal Access Token to get started.</p>
+            <p class="modal-hint">Get your token at: <a href="https://app.asana.com/0/my-apps" target="_blank">app.asana.com/0/my-apps</a></p>
+            <input type="text" id="pat-input" class="pat-input" placeholder="Paste your Personal Access Token here" />
+            <div class="modal-actions">
+                <button id="pat-submit-btn" class="btn btn-primary">Connect</button>
+                <button id="pat-cancel-btn" class="btn btn-secondary">Cancel</button>
+            </div>
+            <p class="modal-note">Note: Your token will be stored in your browser's localStorage.</p>
+        </div>
+    </div>
+
+    <!-- Task Details Modal (for failed geocodes) -->
+    <div id="task-details-modal" class="modal" style="display: none;">
+        <div class="modal-content task-details-content">
+            <div class="modal-header">
+                <h2 id="task-details-title">Task Details</h2>
+                <button id="task-details-close" class="modal-close-btn">&times;</button>
+            </div>
+            <div id="task-details-body" class="task-details-body">
+                <!-- Task details will be populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-section">
+                <div class="section-header">
+                    <h2>Filters</h2>
+                    <button id="refresh-btn" class="btn btn-small" title="Refresh data from Asana">
+                        <span>&#x21bb;</span> Refresh
+                    </button>
+                </div>
+
+                <!-- State Filters -->
+                <div class="filter-group">
+                    <h3>States</h3>
+                    <div id="state-filters" class="filter-checkboxes">
+                        <!-- State checkboxes will be populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- City Filters (shown only for CA/TX) -->
+                <div class="filter-group" id="city-filter-group" style="display: none;">
+                    <h3>Cities</h3>
+                    <div id="city-filters" class="filter-checkboxes">
+                        <!-- City checkboxes will be populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Assignee Filters (Photographers) -->
+                <div class="filter-group" id="assignee-filter-group">
+                    <h3>Photographers</h3>
+                    <div id="assignee-filters" class="filter-checkboxes">
+                        <!-- Assignee checkboxes will be populated dynamically -->
+                    </div>
+                </div>
+
+                <button id="apply-filters-btn" class="btn btn-primary btn-block">Apply Filters</button>
+            </div>
+
+            <!-- Task List -->
+            <div class="sidebar-section">
+                <h2>Photo Shoots <span id="task-count" class="task-count">(0)</span></h2>
+                <div id="task-list" class="task-list">
+                    <p class="placeholder-text">Connect to Asana and select filters to view tasks</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Map Container -->
+        <main class="map-container">
+            <div id="map"></div>
+
+            <!-- Loading Overlay -->
+            <div id="loading-overlay" class="loading-overlay" style="display: none;">
+                <div class="loading-content">
+                    <div class="spinner"></div>
+                    <p id="loading-message">Loading...</p>
+                    <div id="progress-bar" class="progress-bar" style="display: none;">
+                        <div id="progress-fill" class="progress-fill"></div>
+                    </div>
+                    <p id="progress-text" class="progress-text" style="display: none;"></p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+
+    <!-- Application JS Modules -->
+    <script type="module" src="js/config.js"></script>
+    <script type="module" src="js/auth.js"></script>
+    <script type="module" src="js/asana-client.js"></script>
+    <script type="module" src="js/address-parser.js"></script>
+    <script type="module" src="js/geocoder.js"></script>
+    <script type="module" src="js/map.js"></script>
+    <script type="module" src="js/ui.js"></script>
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
