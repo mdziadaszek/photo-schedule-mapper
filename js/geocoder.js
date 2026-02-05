@@ -3,8 +3,8 @@
 
 export class Geocoder {
   constructor() {
-    // PHP backend endpoint
-    this.apiUrl = '/api/geocode.php';
+    // PHP backend endpoint (relative to app directory)
+    this.apiUrl = './api/geocode.php';
   }
 
   /**
