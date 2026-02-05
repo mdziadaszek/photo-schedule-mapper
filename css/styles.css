@@ -92,6 +92,7 @@ body {
     border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
     overflow-y: auto;
+    max-height: 60%;
 }
 
 .sidebar-section:last-child {
@@ -100,6 +101,8 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    max-height: none;
+    min-height: 40%;
 }
 
 .section-header {

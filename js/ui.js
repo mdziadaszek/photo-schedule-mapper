@@ -379,11 +379,11 @@ export class UIManager {
       }
     });
 
-    // Update "Select All" checkbox
-    const selectAllCheckbox = document.getElementById('state-select-all');
-    if (selectAllCheckbox) {
-      selectAllCheckbox.checked = true;
-    }
+    // Use a small timeout to ensure checkboxes are rendered before updating
+    setTimeout(() => {
+      // Update "Select All" checkbox based on actual state
+      this.updateSelectAllStateCheckbox();
+    }, 0);
 
     // Trigger custom event for filter change
     this.dispatchFilterChangeEvent();
@@ -402,11 +402,11 @@ export class UIManager {
       }
     });
 
-    // Update "Select All" checkbox
-    const selectAllCheckbox = document.getElementById('assignee-select-all');
-    if (selectAllCheckbox) {
-      selectAllCheckbox.checked = true;
-    }
+    // Use a small timeout to ensure checkboxes are rendered before updating
+    setTimeout(() => {
+      // Update "Select All" checkbox based on actual state
+      this.updateSelectAllAssigneeCheckbox();
+    }, 0);
 
     // Trigger custom event for filter change
     this.dispatchFilterChangeEvent();
