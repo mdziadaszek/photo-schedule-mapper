@@ -16,7 +16,6 @@ export class UIManager {
       cityFilterGroup: document.getElementById('city-filter-group'),
       assigneeFilters: document.getElementById('assignee-filters'),
       assigneeFilterGroup: document.getElementById('assignee-filter-group'),
-      applyFiltersBtn: document.getElementById('apply-filters-btn'),
       refreshBtn: document.getElementById('refresh-btn'),
 
       // Task list elements
@@ -781,7 +780,6 @@ export class UIManager {
    * @param {boolean} disabled - Whether to disable controls
    */
   setControlsDisabled(disabled) {
-    this.elements.applyFiltersBtn.disabled = disabled;
     this.elements.refreshBtn.disabled = disabled;
 
     const allCheckboxes = document.querySelectorAll('.filter-checkbox input[type="checkbox"]');

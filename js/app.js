@@ -84,14 +84,11 @@ class AsanaSchedulerApp {
       this.handleRefresh();
     });
 
-    // Apply filters button
-    this.ui.elements.applyFiltersBtn.addEventListener('click', () => {
-      this.handleApplyFilters();
-    });
-
     // Listen for filter changes (state selection)
-    document.addEventListener('filter-changed', (e) => {
+    document.addEventListener('filter-changed', async (e) => {
       this.handleFilterStateChange(e.detail);
+      // Auto-apply filters when checkboxes change
+      await this.handleApplyFilters();
     });
 
     // Listen for task item clicks

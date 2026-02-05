@@ -173,12 +173,22 @@ body {
     margin-bottom: 1.5rem;
 }
 
+#assignee-filter-group {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#assignee-filter-group .filter-checkboxes {
+    flex-grow: 1;
+    overflow-y: auto;
+}
+
 .filter-checkboxes {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    max-height: 300px;
-    overflow-y: auto;
     max-height: 200px;
     overflow-y: auto;
 }
