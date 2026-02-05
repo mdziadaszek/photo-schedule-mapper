@@ -92,17 +92,16 @@ body {
     border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
     overflow-y: auto;
-    max-height: 60%;
+    max-height: 50%;
 }
 
 .sidebar-section:last-child {
     border-bottom: none;
-    flex-grow: 1;
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
-    overflow: visible;
-    max-height: none;
-    min-height: 40%;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .section-header {
@@ -267,6 +266,11 @@ body {
 .task-item-property {
     font-size: 0.75rem;
     color: var(--text-secondary);
+}
+
+.task-item-assignee {
+    color: var(--primary-color);
+    font-weight: 500;
 }
 
 .geocode-warning {

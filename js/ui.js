@@ -470,8 +470,15 @@ export class UIManager {
       property.className = 'task-item-property';
       property.textContent = taskInfo.projectName;
 
+      // Add assignee/photographer name
+      const assignee = document.createElement('div');
+      assignee.className = 'task-item-property task-item-assignee';
+      const assigneeName = taskInfo.task.assignee ? taskInfo.task.assignee.name : 'Unassigned';
+      assignee.textContent = assigneeName;
+
       taskItem.appendChild(title);
       taskItem.appendChild(property);
+      taskItem.appendChild(assignee);
 
       // Click handler - show details modal for failed geocodes, or highlight marker for successful ones
       taskItem.addEventListener('click', () => {
