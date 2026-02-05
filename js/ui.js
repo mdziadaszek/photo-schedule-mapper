@@ -390,6 +390,29 @@ export class UIManager {
   }
 
   /**
+   * Programmatically select all assignees
+   * @param {Array<string>} assignees - Array of assignee names to select
+   */
+  selectAllAssignees(assignees) {
+    assignees.forEach(assigneeName => {
+      const checkbox = document.getElementById(`assignee-${assigneeName.replace(/\s+/g, '-')}`);
+      if (checkbox) {
+        checkbox.checked = true;
+        this.selectedAssignees.add(assigneeName);
+      }
+    });
+
+    // Update "Select All" checkbox
+    const selectAllCheckbox = document.getElementById('assignee-select-all');
+    if (selectAllCheckbox) {
+      selectAllCheckbox.checked = true;
+    }
+
+    // Trigger custom event for filter change
+    this.dispatchFilterChangeEvent();
+  }
+
+  /**
    * Programmatically select a specific assignee
    * @param {string} assigneeName - Assignee name to select
    */

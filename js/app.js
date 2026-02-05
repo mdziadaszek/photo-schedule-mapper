@@ -322,8 +322,8 @@ class AsanaSchedulerApp {
       // Auto-select all states by default
       this.ui.selectAllStates(stateTags);
 
-      // Auto-select current user by default
-      this.ui.selectAssignee(this.currentUser.name);
+      // Auto-select all assignees by default
+      this.ui.selectAllAssignees(assignees);
 
       this.ui.showSuccess(`Loaded ${this.allTasks.length} photo shoot tasks`);
 
