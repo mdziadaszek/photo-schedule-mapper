@@ -91,6 +91,7 @@ body {
     padding: 1.5rem;
     border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
+    overflow-y: auto;
 }
 
 .sidebar-section:last-child {
@@ -178,18 +179,20 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    min-height: 300px;
 }
 
 #assignee-filter-group .filter-checkboxes {
     flex-grow: 1;
     overflow-y: auto;
+    max-height: none;
 }
 
 .filter-checkboxes {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    max-height: 200px;
+    max-height: 150px;
     overflow-y: auto;
 }
 
