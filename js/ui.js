@@ -78,8 +78,9 @@ export class UIManager {
   /**
    * Populate state filter checkboxes
    * @param {Array<string>} states - Array of state codes
+   * @param {Object} counts - Optional map of state code to task count
    */
-  populateStateFilters(states) {
+  populateStateFilters(states, counts = null) {
     this.elements.stateFilters.innerHTML = '';
 
     if (states.length === 0) {
@@ -100,11 +101,23 @@ export class UIManager {
     this.elements.stateFilters.appendChild(selectAllCheckbox);
 
     states.forEach(stateCode => {
+      const count = counts ? counts[stateCode] || 0 : null;
+      const label = count !== null ? `${stateCode} (${count})` : stateCode;
+      const disabled = count === 0;
+
       const checkbox = this.createCheckbox(
         `state-${stateCode}`,
-        stateCode,
-        (checked) => this.handleStateFilterChange(stateCode, checked)
+        label,
+        (checked) => this.handleStateFilterChange(stateCode, checked),
+        disabled
       );
+
+      // Preserve checked state if this state was previously selected
+      const input = checkbox.querySelector('input');
+      if (this.selectedStates.has(stateCode)) {
+        input.checked = true;
+      }
+
       this.elements.stateFilters.appendChild(checkbox);
     });
   }
@@ -136,8 +149,9 @@ export class UIManager {
   /**
    * Populate assignee (photographer) filter checkboxes
    * @param {Array<string>} assignees - Array of assignee names
+   * @param {Object} counts - Optional map of assignee name to task count
    */
-  populateAssigneeFilters(assignees) {
+  populateAssigneeFilters(assignees, counts = null) {
     this.elements.assigneeFilters.innerHTML = '';
 
     if (assignees.length === 0) {
@@ -158,11 +172,23 @@ export class UIManager {
     this.elements.assigneeFilters.appendChild(selectAllCheckbox);
 
     assignees.forEach(assigneeName => {
+      const count = counts ? counts[assigneeName] || 0 : null;
+      const label = count !== null ? `${assigneeName} (${count})` : assigneeName;
+      const disabled = count === 0;
+
       const checkbox = this.createCheckbox(
         `assignee-${assigneeName.replace(/\s+/g, '-')}`,
-        assigneeName,
-        (checked) => this.handleAssigneeFilterChange(assigneeName, checked)
+        label,
+        (checked) => this.handleAssigneeFilterChange(assigneeName, checked),
+        disabled
       );
+
+      // Preserve checked state if this assignee was previously selected
+      const input = checkbox.querySelector('input');
+      if (this.selectedAssignees.has(assigneeName)) {
+        input.checked = true;
+      }
+
       this.elements.assigneeFilters.appendChild(checkbox);
     });
   }
@@ -172,20 +198,26 @@ export class UIManager {
    * @param {string} id - Checkbox ID
    * @param {string} label - Checkbox label
    * @param {Function} onChange - Change event handler
+   * @param {boolean} disabled - Whether checkbox is disabled
    * @returns {HTMLElement} Checkbox container element
    */
-  createCheckbox(id, label, onChange) {
+  createCheckbox(id, label, onChange, disabled = false) {
     const container = document.createElement('div');
     container.className = 'filter-checkbox';
 
     const input = document.createElement('input');
     input.type = 'checkbox';
     input.id = id;
+    input.disabled = disabled;
     input.addEventListener('change', (e) => onChange(e.target.checked));
 
     const labelEl = document.createElement('label');
     labelEl.htmlFor = id;
     labelEl.textContent = label;
+    if (disabled) {
+      labelEl.style.opacity = '0.5';
+      labelEl.style.cursor = 'not-allowed';
+    }
 
     container.appendChild(input);
     container.appendChild(labelEl);

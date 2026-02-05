@@ -207,15 +207,19 @@ class AsanaSchedulerApp {
 
   /**
    * Handle filter state change (when state checkboxes change)
-   * Update city filters based on selected states
+   * Update city filters based on selected states and photographer counts
    */
   handleFilterStateChange(filterData) {
-    const { selectedStates } = filterData;
+    const { selectedStates, selectedAssignees } = filterData;
 
-    // Determine if CA or TX is selected
+    if (this.allTasks.length === 0) {
+      return;
+    }
+
+    // Update city filters for CA/TX states
     const hasCaOrTx = selectedStates.some(state => state === 'CA' || state === 'TX');
 
-    if (hasCaOrTx && this.allTasks.length > 0) {
+    if (hasCaOrTx) {
       // Extract city tags for selected CA/TX states
       let allCities = [];
 
@@ -237,6 +241,22 @@ class AsanaSchedulerApp {
       // Hide city filters
       this.ui.populateCityFilters([]);
     }
+
+    // Update photographer counts based on selected states
+    const assignees = this.asanaClient.extractAssignees(this.allTasks);
+    const assigneeCounts = this.asanaClient.countTasksByAssignee(
+      this.allTasks,
+      Array.from(selectedStates)
+    );
+    this.ui.populateAssigneeFilters(assignees, assigneeCounts);
+
+    // Update state counts based on selected photographers
+    const states = this.asanaClient.extractStateTags(this.allTasks);
+    const stateCounts = this.asanaClient.countTasksByState(
+      this.allTasks,
+      Array.from(selectedAssignees)
+    );
+    this.ui.populateStateFilters(states, stateCounts);
   }
 
   /**

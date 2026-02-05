@@ -346,6 +346,75 @@ export class AsanaClient {
   }
 
   /**
+   * Count tasks per state for selected assignees
+   * @param {Array} tasks - Array of all tasks
+   * @param {Array<string>} selectedAssignees - Selected photographer names (empty = all)
+   * @returns {Object} Map of state code to task count
+   */
+  countTasksByState(tasks, selectedAssignees = []) {
+    const stateCounts = {};
+
+    tasks.forEach(task => {
+      // If assignees selected, filter by them
+      if (selectedAssignees.length > 0) {
+        const matchesAssignee = task.assignee && selectedAssignees.includes(task.assignee.name);
+        if (!matchesAssignee) {
+          return; // Skip this task
+        }
+      }
+
+      // Extract state tags
+      if (task.tags && Array.isArray(task.tags)) {
+        task.tags.forEach(tag => {
+          if (tag.name && tag.name.startsWith(TAG_CONFIG.statePrefix)) {
+            const stateCode = tag.name.substring(TAG_CONFIG.statePrefix.length).trim();
+            if (stateCode) {
+              stateCounts[stateCode] = (stateCounts[stateCode] || 0) + 1;
+            }
+          }
+        });
+      }
+    });
+
+    return stateCounts;
+  }
+
+  /**
+   * Count tasks per assignee for selected states
+   * @param {Array} tasks - Array of all tasks
+   * @param {Array<string>} selectedStates - Selected state codes (empty = all)
+   * @returns {Object} Map of assignee name to task count
+   */
+  countTasksByAssignee(tasks, selectedStates = []) {
+    const assigneeCounts = {};
+
+    tasks.forEach(task => {
+      // If states selected, check if task has any of those state tags
+      if (selectedStates.length > 0) {
+        const hasStateTag = task.tags && task.tags.some(tag => {
+          if (!tag.name || !tag.name.startsWith(TAG_CONFIG.statePrefix)) {
+            return false;
+          }
+          const stateCode = tag.name.substring(TAG_CONFIG.statePrefix.length).trim();
+          return selectedStates.includes(stateCode);
+        });
+
+        if (!hasStateTag) {
+          return; // Skip this task
+        }
+      }
+
+      // Count by assignee
+      if (task.assignee && task.assignee.name) {
+        const name = task.assignee.name;
+        assigneeCounts[name] = (assigneeCounts[name] || 0) + 1;
+      }
+    });
+
+    return assigneeCounts;
+  }
+
+  /**
    * Get project name (property name) for a task
    * @param {Object} task - Asana task object
    * @returns {string} Project name or 'Unknown Property'
