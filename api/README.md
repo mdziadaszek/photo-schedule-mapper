@@ -189,6 +189,7 @@ const data = await response.json();
 ## Cache Management
 
 ### View cache statistics
+
 ```bash
 # Count cached addresses
 jq 'length' /var/htdocs/photography-scheduler/api/cache/geocode.json
@@ -197,7 +198,37 @@ jq 'length' /var/htdocs/photography-scheduler/api/cache/geocode.json
 cat /var/htdocs/photography-scheduler/api/cache/geocode.json
 ```
 
-### Clear cache
+### Clear only failed geocodes (RECOMMENDED)
+
+This removes failed/null entries while keeping successful geocodes:
+
+```bash
+cd /var/htdocs/photography-scheduler/api
+php clear-failures.php
+```
+
+Output example:
+
+```text
+Cache Statistics:
+  Total entries: 582
+  Successful geocodes: 547
+  Failed geocodes: 35
+
+Backup created: cache/geocode.json.backup.2024-02-04_15-30-45
+
+Results:
+  Removed 35 failed entries
+  Kept 547 successful entries
+  Cache file updated successfully!
+
+Failed addresses will be retried on the next geocoding request.
+```
+
+### Clear entire cache
+
+Only use this if you want to re-geocode everything:
+
 ```bash
 rm /var/htdocs/photography-scheduler/api/cache/geocode.json
 touch /var/htdocs/photography-scheduler/api/cache/geocode.json
