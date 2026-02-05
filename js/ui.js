@@ -343,8 +343,8 @@ export class UIManager {
     const selectAllCheckbox = document.getElementById('state-select-all');
     if (!selectAllCheckbox) return;
 
-    // Count total state checkboxes
-    const allStateCheckboxes = this.elements.stateFilters.querySelectorAll('input[type="checkbox"][id^="state-"]:not(#state-select-all)');
+    // Count total state checkboxes (only enabled ones)
+    const allStateCheckboxes = this.elements.stateFilters.querySelectorAll('input[type="checkbox"][id^="state-"]:not(#state-select-all):not(:disabled)');
     const allChecked = allStateCheckboxes.length > 0 &&
                        Array.from(allStateCheckboxes).every(cb => cb.checked);
 
@@ -358,8 +358,8 @@ export class UIManager {
     const selectAllCheckbox = document.getElementById('assignee-select-all');
     if (!selectAllCheckbox) return;
 
-    // Count total assignee checkboxes
-    const allAssigneeCheckboxes = this.elements.assigneeFilters.querySelectorAll('input[type="checkbox"][id^="assignee-"]:not(#assignee-select-all)');
+    // Count total assignee checkboxes (only enabled ones)
+    const allAssigneeCheckboxes = this.elements.assigneeFilters.querySelectorAll('input[type="checkbox"][id^="assignee-"]:not(#assignee-select-all):not(:disabled)');
     const allChecked = allAssigneeCheckboxes.length > 0 &&
                        Array.from(allAssigneeCheckboxes).every(cb => cb.checked);
 
