@@ -1,28 +1,14 @@
-// Geocoder - Converts addresses to lat/lon coordinates using Nominatim (OpenStreetMap)
-// Implements rate limiting (1 req/sec) and caching
-
-import { GEOCODING_CONFIG, CACHE_CONFIG } from './config.js';
+// Geocoder - Converts addresses to lat/lon coordinates using PHP backend with LocationIQ
+// Server-side caching for fast, shared results across all users
 
 export class Geocoder {
   constructor() {
-    this.baseUrl = GEOCODING_CONFIG.baseUrl;
-    this.searchEndpoint = GEOCODING_CONFIG.searchEndpoint;
-    this.rateLimit = GEOCODING_CONFIG.rateLimit;
-    this.userAgent = GEOCODING_CONFIG.userAgent;
-
-    // In-memory cache for this session
-    this.cache = new Map();
-
-    // Request queue for rate limiting
-    this.requestQueue = [];
-    this.isProcessing = false;
-
-    // Load cached geocode results from localStorage
-    this.loadCache();
+    // PHP backend endpoint
+    this.apiUrl = '/api/geocode.php';
   }
 
   /**
-   * Geocode an address to lat/lon coordinates
+   * Geocode a single address to lat/lon coordinates
    * @param {string} address - Address to geocode
    * @returns {Promise<Object|null>} Object with lat, lon, display_name or null if not found
    */
@@ -31,268 +17,103 @@ export class Geocoder {
       return null;
     }
 
-    // Normalize address for cache key
-    const cacheKey = address.trim().toLowerCase();
+    // Call batch method with single address
+    const results = await this.geocodeBatch([address]);
+    const normalized = address.trim().toLowerCase();
 
-    // Check cache first
-    if (this.cache.has(cacheKey)) {
-      const cached = this.cache.get(cacheKey);
-
-      // Check if cache entry is expired
-      if (cached.timestamp + CACHE_CONFIG.geocodeExpiry > Date.now()) {
-        return cached.result;
-      } else {
-        // Remove expired entry
-        this.cache.delete(cacheKey);
-      }
-    }
-
-    // Add to queue and return promise
-    return new Promise((resolve, reject) => {
-      this.requestQueue.push({
-        address,
-        cacheKey,
-        resolve,
-        reject
-      });
-
-      // Start processing queue if not already processing
-      this.processQueue();
-    });
+    return results[normalized] || null;
   }
 
   /**
-   * Process the geocoding request queue with rate limiting
+   * Batch geocode multiple addresses (primary method)
+   * @param {Array<string>} addresses - Array of addresses to geocode
+   * @returns {Promise<Object>} Object mapping normalized addresses to {lat, lon, display_name} or null
    */
-  async processQueue() {
-    // If already processing or queue is empty, return
-    if (this.isProcessing || this.requestQueue.length === 0) {
-      return;
+  async geocodeBatch(addresses) {
+    if (!Array.isArray(addresses) || addresses.length === 0) {
+      return {};
     }
 
-    this.isProcessing = true;
-    const { address, cacheKey, resolve, reject } = this.requestQueue.shift();
-
     try {
-      // Build search URL
-      const searchUrl = this.buildSearchUrl(address);
-
-      // Make request to Nominatim API
-      const response = await fetch(searchUrl, {
+      const response = await fetch(this.apiUrl, {
+        method: 'POST',
         headers: {
-          'User-Agent': this.userAgent
-        }
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ addresses })
       });
 
       if (!response.ok) {
-        throw new Error(`Geocoding failed with status ${response.status}`);
+        throw new Error(`Geocoding API returned status ${response.status}`);
       }
 
       const data = await response.json();
 
-      let result = null;
-
-      if (data && Array.isArray(data) && data.length > 0) {
-        // Extract first result
-        const firstResult = data[0];
-        result = {
-          lat: parseFloat(firstResult.lat),
-          lon: parseFloat(firstResult.lon),
-          display_name: firstResult.display_name
-        };
+      if (!data || !data.results) {
+        console.error('Invalid response from geocoding API:', data);
+        return {};
       }
 
-      // Cache the result (even if null, to avoid repeated failed lookups)
-      this.cacheResult(cacheKey, result);
+      // Log stats if available
+      if (data.stats) {
+        console.log('Geocoding stats:', data.stats);
+      }
 
-      // Resolve promise with result
-      resolve(result);
+      return data.results;
 
     } catch (error) {
-      console.error(`Geocoding error for "${address}":`, error);
-      reject(error);
-
-    } finally {
-      // Wait for rate limit duration before processing next request
-      setTimeout(() => {
-        this.isProcessing = false;
-        this.processQueue(); // Process next item in queue
-      }, this.rateLimit);
+      console.error('Batch geocoding failed:', error);
+      return {};
     }
   }
 
   /**
-   * Build Nominatim search URL
-   * @param {string} address - Address to search
-   * @returns {string} Full search URL
+   * Get cache statistics from server
+   * @returns {Promise<Object>} Cache stats from server
    */
-  buildSearchUrl(address) {
-    const params = new URLSearchParams({
-      q: address,
-      format: GEOCODING_CONFIG.format,
-      limit: GEOCODING_CONFIG.limit.toString()
-    });
-
-    return `${this.baseUrl}${this.searchEndpoint}?${params.toString()}`;
-  }
-
-  /**
-   * Cache a geocoding result
-   * @param {string} cacheKey - Cache key (normalized address)
-   * @param {Object|null} result - Geocoding result
-   */
-  cacheResult(cacheKey, result) {
-    this.cache.set(cacheKey, {
-      result,
-      timestamp: Date.now()
-    });
-
-    // Also save to localStorage (debounced)
-    this.scheduleSaveCache();
-  }
-
-  /**
-   * Schedule saving cache to localStorage (debounced)
-   */
-  scheduleSaveCache() {
-    if (this.saveCacheTimeout) {
-      clearTimeout(this.saveCacheTimeout);
-    }
-
-    // Save cache after 2 seconds of inactivity
-    this.saveCacheTimeout = setTimeout(() => {
-      this.saveCache();
-    }, 2000);
-  }
-
-  /**
-   * Load cache from localStorage
-   */
-  loadCache() {
+  async getCacheStats() {
     try {
-      const cachedData = localStorage.getItem(CACHE_CONFIG.keys.geocodeCache);
-      if (cachedData) {
-        const parsed = JSON.parse(cachedData);
+      const response = await fetch(this.apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ addresses: [] }) // Empty request to get stats only
+      });
 
-        // Convert array back to Map
-        if (Array.isArray(parsed)) {
-          this.cache = new Map(parsed);
-
-          // Clean up expired entries
-          const now = Date.now();
-          for (const [key, value] of this.cache.entries()) {
-            if (value.timestamp + CACHE_CONFIG.geocodeExpiry < now) {
-              this.cache.delete(key);
-            }
-          }
-        }
+      if (response.ok) {
+        const data = await response.json();
+        return data.stats || {};
       }
     } catch (error) {
-      console.error('Error loading geocode cache:', error);
-      this.cache = new Map();
+      console.error('Failed to get cache stats:', error);
     }
+
+    return {};
   }
 
   /**
-   * Save cache to localStorage
-   */
-  saveCache() {
-    try {
-      // Convert Map to array for JSON serialization
-      const cacheArray = Array.from(this.cache.entries());
-      localStorage.setItem(CACHE_CONFIG.keys.geocodeCache, JSON.stringify(cacheArray));
-    } catch (error) {
-      console.error('Error saving geocode cache:', error);
-    }
-  }
-
-  /**
-   * Clear all cached geocoding results
+   * Clear cache (placeholder - cache is server-side now)
+   * User would need server access to clear cache
    */
   clearCache() {
-    this.cache.clear();
-    localStorage.removeItem(CACHE_CONFIG.keys.geocodeCache);
+    console.warn('Cache is now server-side. Contact server admin to clear cache.');
   }
 
   /**
-   * Get cache statistics
-   * @returns {Object} Cache stats
-   */
-  getCacheStats() {
-    let validEntries = 0;
-    let expiredEntries = 0;
-    const now = Date.now();
-
-    for (const [key, value] of this.cache.entries()) {
-      if (value.timestamp + CACHE_CONFIG.geocodeExpiry > now) {
-        validEntries++;
-      } else {
-        expiredEntries++;
-      }
-    }
-
-    return {
-      total: this.cache.size,
-      valid: validEntries,
-      expired: expiredEntries
-    };
-  }
-
-  /**
-   * Batch geocode multiple addresses
-   * @param {Array<string>} addresses - Array of addresses to geocode
-   * @param {Function} onProgress - Progress callback (current, total)
-   * @returns {Promise<Array>} Array of geocoding results
-   */
-  async geocodeBatch(addresses, onProgress = null) {
-    const results = [];
-
-    for (let i = 0; i < addresses.length; i++) {
-      try {
-        const result = await this.geocode(addresses[i]);
-        results.push({
-          address: addresses[i],
-          result: result,
-          success: result !== null
-        });
-
-        if (onProgress) {
-          onProgress(i + 1, addresses.length);
-        }
-      } catch (error) {
-        results.push({
-          address: addresses[i],
-          result: null,
-          success: false,
-          error: error.message
-        });
-
-        if (onProgress) {
-          onProgress(i + 1, addresses.length);
-        }
-      }
-    }
-
-    // Save cache after batch processing
-    this.saveCache();
-
-    return results;
-  }
-
-  /**
-   * Get number of pending requests in queue
-   * @returns {number} Queue length
-   */
-  getQueueLength() {
-    return this.requestQueue.length;
-  }
-
-  /**
-   * Check if geocoder is currently processing
-   * @returns {boolean} True if processing
+   * Check if geocoder is currently processing (always false for server-side)
+   * @returns {boolean} False (server handles processing)
    */
   isGeocoding() {
-    return this.isProcessing || this.requestQueue.length > 0;
+    return false;
+  }
+
+  /**
+   * Get number of pending requests (always 0 for server-side)
+   * @returns {number} 0 (server handles queue)
+   */
+  getQueueLength() {
+    return 0;
   }
 }
 

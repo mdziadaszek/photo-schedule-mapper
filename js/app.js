@@ -401,7 +401,7 @@ class AsanaSchedulerApp {
   }
 
   /**
-   * Geocode addresses and add markers to map
+   * Geocode addresses and add markers to map (using batch geocoding)
    */
   async geocodeAndDisplayTasks(tasksWithAddresses) {
     let successCount = 0;
@@ -410,33 +410,33 @@ class AsanaSchedulerApp {
     // Clear any previous geocode failure indicators
     this.ui.clearGeocodeFailures();
 
-    for (let i = 0; i < tasksWithAddresses.length; i++) {
-      const { task, projectName, address } = tasksWithAddresses[i];
+    // Extract all addresses for batch geocoding
+    const addresses = tasksWithAddresses.map(t => t.address);
 
-      // Update top progress bar (non-blocking)
-      this.ui.updateTopProgress(
-        i + 1,
-        tasksWithAddresses.length,
-        `Geocoding address ${i + 1} of ${tasksWithAddresses.length}...`
-      );
+    // Show progress
+    this.ui.showTopProgressBar(`Geocoding ${addresses.length} addresses...`);
 
-      // Extract contact info (needed for both success and failure)
-      const contact = this.asanaClient.extractContact(task.notes);
+    try {
+      // Batch geocode all addresses at once (instant if cached)
+      const results = await this.geocoder.geocodeBatch(addresses);
 
-      try {
-        // Geocode address
-        const coordinates = await this.geocoder.geocode(address);
+      // Add markers for all results
+      tasksWithAddresses.forEach(({ task, projectName, address }) => {
+        const normalized = address.toLowerCase().trim();
+        const coords = results[normalized];
 
-        if (coordinates) {
+        // Extract contact info
+        const contact = this.asanaClient.extractContact(task.notes);
+
+        if (coords) {
           // Add marker to map
           this.map.addPropertyMarker(
             task,
             projectName,
             address,
-            coordinates,
+            coords,
             contact
           );
-
           successCount++;
         } else {
           console.warn(`No geocoding result for address: ${address}`);
@@ -449,38 +449,28 @@ class AsanaSchedulerApp {
           });
           failCount++;
         }
+      });
 
-      } catch (error) {
-        console.error(`Geocoding failed for address "${address}":`, error);
-        // Mark task as failed to geocode in the UI with details
-        this.ui.markTaskGeocodeFailed(task.gid, {
-          task,
-          projectName,
-          address,
-          contact
-        });
-        failCount++;
+      // Fit map to show all markers
+      this.map.fitBoundsToMarkers();
+
+      // Show results
+      if (successCount > 0) {
+        this.ui.showSuccess(
+          `Displayed ${successCount} properties on the map` +
+          (failCount > 0 ? ` (${failCount} failed to geocode)` : '')
+        );
+      } else {
+        this.ui.showError('Failed to geocode any addresses');
       }
+
+    } catch (error) {
+      console.error('Geocoding error:', error);
+      this.ui.showError('Failed to geocode addresses. Check console for details.');
+    } finally {
+      // Hide top progress bar
+      this.ui.hideTopProgressBar();
     }
-
-    // Fit map to show all markers
-    this.map.fitBoundsToMarkers();
-
-    // Hide top progress bar
-    this.ui.hideTopProgressBar();
-
-    // Show results
-    if (successCount > 0) {
-      this.ui.showSuccess(
-        `Displayed ${successCount} properties on the map` +
-        (failCount > 0 ? ` (${failCount} failed to geocode)` : '')
-      );
-    } else {
-      this.ui.showError('Failed to geocode any addresses');
-    }
-
-    // Save geocode cache
-    this.geocoder.saveCache();
   }
 
   /**

@@ -1,0 +1,5 @@
+# Ignore config file (contains API key)
+config.php
+
+# Ignore cache directory
+cache/
