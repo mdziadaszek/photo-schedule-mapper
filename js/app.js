@@ -508,11 +508,10 @@ class AsanaSchedulerApp {
   }
 }
 
-// Initialize application when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-  const app = new AsanaSchedulerApp();
-  app.init();
+// Initialize application
+// Note: ES6 modules are deferred by default, so DOM is already loaded
+const app = new AsanaSchedulerApp();
+app.init();
 
-  // Make app available globally for debugging
-  window.asanaSchedulerApp = app;
-});
+// Make app available globally for debugging
+window.asanaSchedulerApp = app;
