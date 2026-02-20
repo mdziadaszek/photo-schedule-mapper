@@ -6,7 +6,7 @@ import { AsanaClient } from './asana-client.js';
 import { Geocoder } from './geocoder.js';
 import { TaskMap } from './map.js';
 import { UIManager } from './ui.js';
-import { TAG_CONFIG } from './config.js';
+import { CACHE_CONFIG, UI_CONFIG } from './config.js';
 
 class AsanaSchedulerApp {
   constructor() {
@@ -21,6 +21,9 @@ class AsanaSchedulerApp {
     this.allTasks = [];
     this.currentUser = null;
     this.currentWorkspace = null;
+
+    // Debounce timer for filter changes
+    this._filterTimer = null;
 
     // Bind event handlers
     this.setupEventListeners();
@@ -84,11 +87,11 @@ class AsanaSchedulerApp {
       this.handleRefresh();
     });
 
-    // Listen for filter changes (state selection)
-    document.addEventListener('filter-changed', async (e) => {
+    // Listen for filter changes (state selection) — debounced
+    document.addEventListener('filter-changed', (e) => {
       this.handleFilterStateChange(e.detail);
-      // Auto-apply filters when checkboxes change
-      await this.handleApplyFilters();
+      clearTimeout(this._filterTimer);
+      this._filterTimer = setTimeout(() => this.handleApplyFilters(), UI_CONFIG.filterDebounce);
     });
 
     // Listen for task item clicks
@@ -162,6 +165,11 @@ class AsanaSchedulerApp {
    * Handle logout button click
    */
   handleLogout() {
+    if (this.currentWorkspace) {
+      this._clearTaskCache(this.currentWorkspace.gid);
+    }
+    localStorage.removeItem(CACHE_CONFIG.keys.geocodeFailures);
+
     this.auth.logout();
     this.asanaClient = null;
     this.allTasks = [];
@@ -177,7 +185,7 @@ class AsanaSchedulerApp {
   }
 
   /**
-   * Handle refresh button click
+   * Handle refresh button click — clears task cache for a full fresh fetch
    */
   async handleRefresh() {
     if (!this.auth.isAuthenticated()) {
@@ -185,6 +193,9 @@ class AsanaSchedulerApp {
       return;
     }
 
+    if (this.currentWorkspace) {
+      this._clearTaskCache(this.currentWorkspace.gid);
+    }
     await this.loadAsanaData();
   }
 
@@ -285,58 +296,241 @@ class AsanaSchedulerApp {
   }
 
   /**
-   * Load tasks and populate filters from Asana
+   * Load tasks and populate filters from Asana.
+   * Uses stale-while-revalidate: serve from localStorage cache immediately,
+   * then background-refresh from Asana and re-render if anything changed.
    */
   async loadAsanaData() {
     try {
       this.ui.showLoading('Fetching photo shoot tasks from Asana...');
       this.ui.setControlsDisabled(true);
 
-      // Get workspaces
+      // Get workspaces (fast — only a handful)
       const workspaces = await this.asanaClient.getWorkspaces();
 
       if (workspaces.length === 0) {
         throw new Error('No workspaces found');
       }
 
-      // Use first workspace
       this.currentWorkspace = workspaces[0];
+      const workspaceGid = this.currentWorkspace.gid;
 
-      // Fetch photo shoot tasks
-      this.allTasks = await this.asanaClient.getPhotoShootTasks(this.currentWorkspace.gid);
+      // Try to serve from cache first (instant)
+      const cached = this._loadTaskCache(workspaceGid);
 
-      if (this.allTasks.length === 0) {
-        this.ui.showWarning('No photo shoot tasks found in your workspace');
-        this.ui.populateStateFilters([]);
-        return;
+      if (cached) {
+        this.allTasks = cached.tasks;
+        await this._populateFiltersAndDisplay();
+
+        // Silently refresh in the background — no await, no blocking UI
+        this._backgroundRefreshTasks(workspaceGid, cached.tasks);
+      } else {
+        // Cold path: full blocking fetch
+        this.allTasks = await this.asanaClient.getPhotoShootTasks(workspaceGid);
+        this._saveTaskCache(workspaceGid, this.allTasks);
+        await this._populateFiltersAndDisplay();
       }
 
-      // Extract and populate state filters
-      const stateTags = this.asanaClient.extractStateTags(this.allTasks);
-      this.ui.populateStateFilters(stateTags);
-
-      // Extract and populate assignee (photographer) filters
-      const assignees = this.asanaClient.extractAssignees(this.allTasks);
-      this.ui.populateAssigneeFilters(assignees);
-
-      // Auto-select all states by default
-      this.ui.selectAllStates(stateTags);
-
-      // Auto-select all assignees by default
-      this.ui.selectAllAssignees(assignees);
-
-      this.ui.showSuccess(`Loaded ${this.allTasks.length} photo shoot tasks`);
-
-      // Automatically apply the filters to display tasks on map
-      this.ui.hideLoading();
-      this.ui.setControlsDisabled(false);
-      await this.handleApplyFilters();
+      // Background retry of previously failed geocodes (after a small delay)
+      setTimeout(() => this._retryFailedAddresses(), 2000);
 
     } catch (error) {
       console.error('Error loading Asana data:', error);
       this.ui.showError(`Failed to load tasks: ${error.message}`);
       this.ui.hideLoading();
       this.ui.setControlsDisabled(false);
+    }
+  }
+
+  /**
+   * Populate state/assignee filters and trigger the initial map display.
+   * Extracted to avoid duplicating the same block in the cached and cold paths.
+   */
+  async _populateFiltersAndDisplay() {
+    if (this.allTasks.length === 0) {
+      this.ui.showWarning('No photo shoot tasks found in your workspace');
+      this.ui.populateStateFilters([]);
+      this.ui.hideLoading();
+      this.ui.setControlsDisabled(false);
+      return;
+    }
+
+    // Extract and populate state filters
+    const stateTags = this.asanaClient.extractStateTags(this.allTasks);
+    this.ui.populateStateFilters(stateTags);
+
+    // Extract and populate assignee (photographer) filters
+    const assignees = this.asanaClient.extractAssignees(this.allTasks);
+    this.ui.populateAssigneeFilters(assignees);
+
+    // Auto-select all states and assignees by default
+    this.ui.selectAllStates(stateTags);
+    this.ui.selectAllAssignees(assignees);
+
+    this.ui.showSuccess(`Loaded ${this.allTasks.length} photo shoot tasks`);
+
+    // Apply filters to display tasks on map
+    this.ui.hideLoading();
+    this.ui.setControlsDisabled(false);
+    await this.handleApplyFilters();
+  }
+
+  /**
+   * Silently fetch fresh tasks from Asana and re-render if anything changed.
+   * Runs in the background — never blocks or shows loading overlays.
+   */
+  async _backgroundRefreshTasks(workspaceGid, cachedTasks) {
+    try {
+      const freshTasks = await this.asanaClient.getPhotoShootTasks(workspaceGid);
+      const diff = this._diffTasks(cachedTasks, freshTasks);
+
+      if (!diff.hasChanges) return;
+
+      this.allTasks = freshTasks;
+      this._saveTaskCache(workspaceGid, freshTasks);
+
+      // Re-apply current filters — all geocoding is cached, so this is near-instant
+      const { selectedStates, selectedCities, selectedAssignees } = this.ui.getSelectedFilters();
+      await this.applyFilters(selectedStates, selectedCities, selectedAssignees);
+
+      const parts = [
+        diff.added.length    && `${diff.added.length} added`,
+        diff.removed.length  && `${diff.removed.length} removed`,
+        diff.modified.length && `${diff.modified.length} updated`,
+      ].filter(Boolean);
+      this.ui.showSuccess(`Tasks refreshed: ${parts.join(', ')}`);
+
+    } catch (e) {
+      // Silently ignore — background refresh should never disrupt the user
+      console.warn('Background task refresh failed:', e);
+    }
+  }
+
+  /**
+   * Compute a short fingerprint of the fields we care about for change detection.
+   */
+  _taskFingerprint(task) {
+    const address = this.asanaClient.getTaskAddress(task) || '';
+    return `${task.name}|${task.completed}|${task.assignee?.name || ''}|${address}`;
+  }
+
+  /**
+   * Diff two task arrays and return added/removed/modified sets.
+   */
+  _diffTasks(oldTasks, newTasks) {
+    const oldMap = new Map(oldTasks.map(t => [t.gid, this._taskFingerprint(t)]));
+    const newMap = new Map(newTasks.map(t => [t.gid, this._taskFingerprint(t)]));
+    const added    = newTasks.filter(t => !oldMap.has(t.gid));
+    const removed  = oldTasks.filter(t => !newMap.has(t.gid));
+    const modified = newTasks.filter(t => oldMap.has(t.gid) && oldMap.get(t.gid) !== newMap.get(t.gid));
+    return { added, removed, modified, hasChanges: added.length + removed.length + modified.length > 0 };
+  }
+
+  // ─── Task cache helpers ───────────────────────────────────────────────────
+
+  _loadTaskCache(workspaceGid) {
+    try {
+      const raw = localStorage.getItem(`${CACHE_CONFIG.keys.taskCache}_${workspaceGid}`);
+      if (!raw) return null;
+      return JSON.parse(raw); // { tasks, timestamp }
+    } catch {
+      return null;
+    }
+  }
+
+  _saveTaskCache(workspaceGid, tasks) {
+    try {
+      localStorage.setItem(
+        `${CACHE_CONFIG.keys.taskCache}_${workspaceGid}`,
+        JSON.stringify({ tasks, timestamp: Date.now() })
+      );
+    } catch (e) {
+      console.warn('Task cache write failed (localStorage may be full):', e);
+    }
+  }
+
+  _clearTaskCache(workspaceGid) {
+    localStorage.removeItem(`${CACHE_CONFIG.keys.taskCache}_${workspaceGid}`);
+  }
+
+  // ─── Geocode failure tracking & retry ────────────────────────────────────
+
+  _storeGeocodeFailure(address) {
+    try {
+      const key = CACHE_CONFIG.keys.geocodeFailures;
+      const map = JSON.parse(localStorage.getItem(key) || '{}');
+      if (!map[address]) {
+        // Only record on first failure — don't reset the retryAfter if already queued
+        map[address] = {
+          firstFailed: Date.now(),
+          retryAfter: Date.now() + CACHE_CONFIG.geocodeRetryInterval
+        };
+        localStorage.setItem(key, JSON.stringify(map));
+      }
+    } catch {}
+  }
+
+  _clearGeocodeFailure(address) {
+    try {
+      const key = CACHE_CONFIG.keys.geocodeFailures;
+      const map = JSON.parse(localStorage.getItem(key) || '{}');
+      if (map[address]) {
+        delete map[address];
+        localStorage.setItem(key, JSON.stringify(map));
+      }
+    } catch {}
+  }
+
+  /**
+   * Background retry of geocoding failures that are at least 24 h old.
+   * Runs silently — only shows a toast if any addresses newly succeed.
+   */
+  async _retryFailedAddresses() {
+    try {
+      const key = CACHE_CONFIG.keys.geocodeFailures;
+      const map = JSON.parse(localStorage.getItem(key) || '{}');
+      const now = Date.now();
+      const due = Object.entries(map)
+        .filter(([, info]) => info.retryAfter <= now)
+        .map(([addr]) => addr);
+
+      if (due.length === 0) return;
+
+      console.log(`Retrying ${due.length} failed geocode(s) in background…`);
+      // Pass due addresses as both the batch and the force list so the PHP
+      // backend skips the null-cache specifically for these entries.
+      const results = await this.geocoder.geocodeBatch(due, due);
+
+      let anySuccess = false;
+      for (const address of due) {
+        const normalized = address.toLowerCase().trim();
+        if (results[normalized]) {
+          this._clearGeocodeFailure(address);
+          anySuccess = true;
+        } else {
+          // Retry again in another 24 h
+          map[address].retryAfter = now + CACHE_CONFIG.geocodeRetryInterval;
+        }
+      }
+
+      // Persist updated failure map (only if there are still failures)
+      const remaining = Object.keys(map).filter(k => !due.includes(k) || !results[k.toLowerCase().trim()]);
+      if (remaining.length > 0) {
+        const updated = {};
+        for (const addr of remaining) updated[addr] = map[addr];
+        localStorage.setItem(key, JSON.stringify(updated));
+      } else {
+        localStorage.removeItem(key);
+      }
+
+      if (anySuccess) {
+        // Re-render so newly geocoded addresses get their markers
+        const { selectedStates, selectedCities, selectedAssignees } = this.ui.getSelectedFilters();
+        await this.applyFilters(selectedStates, selectedCities, selectedAssignees);
+        this.ui.showSuccess('Previously failed addresses were geocoded successfully');
+      }
+    } catch (e) {
+      console.warn('Background geocode retry failed:', e);
     }
   }
 
@@ -418,7 +612,8 @@ class AsanaSchedulerApp {
   }
 
   /**
-   * Geocode addresses and add markers to map (using batch geocoding)
+   * Geocode addresses and add markers to map (using batch geocoding).
+   * Tracks per-address failures in localStorage for background retry.
    */
   async geocodeAndDisplayTasks(tasksWithAddresses) {
     let successCount = 0;
@@ -446,6 +641,9 @@ class AsanaSchedulerApp {
         const contact = this.asanaClient.extractContact(task.notes);
 
         if (coords) {
+          // Clear any stored failure for this address (e.g. fixed in Asana)
+          this._clearGeocodeFailure(address);
+
           // Add marker to map
           this.map.addPropertyMarker(
             task,
@@ -457,6 +655,8 @@ class AsanaSchedulerApp {
           successCount++;
         } else {
           console.warn(`No geocoding result for address: ${address}`);
+          // Record failure for background retry
+          this._storeGeocodeFailure(address);
           // Mark task as failed to geocode in the UI with details
           this.ui.markTaskGeocodeFailed(task.gid, {
             task,

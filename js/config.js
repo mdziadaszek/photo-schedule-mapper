@@ -43,13 +43,17 @@ export const CONFIG = {
     geocodeExpiry: 30 * 24 * 60 * 60 * 1000,
     // How long to keep task data cached (5 minutes in milliseconds)
     taskRefreshInterval: 5 * 60 * 1000,
+    // How long before retrying a previously failed geocode (24 hours)
+    geocodeRetryInterval: 24 * 60 * 60 * 1000,
     // LocalStorage keys
     keys: {
       geocodeCache: 'asana_scheduler_geocode_cache',
       accessToken: 'asana_scheduler_access_token',
       refreshToken: 'asana_scheduler_refresh_token',
       tokenExpiry: 'asana_scheduler_token_expiry',
-      lastRefresh: 'asana_scheduler_last_refresh'
+      lastRefresh: 'asana_scheduler_last_refresh',
+      taskCache: 'asana_tasks_cache',
+      geocodeFailures: 'asana_geocode_failures'
     }
   },
 

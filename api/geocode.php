@@ -53,6 +53,12 @@ if (!is_array($addresses)) {
     exit;
 }
 
+// Optional list of addresses to force-retry even if cached as null (failed before)
+$forceAddresses = [];
+if (isset($input['force_addresses']) && is_array($input['force_addresses'])) {
+    $forceAddresses = array_map(fn($a) => strtolower(trim($a)), $input['force_addresses']);
+}
+
 $results = [];
 $newlyCached = 0;
 
@@ -63,16 +69,20 @@ foreach ($addresses as $address) {
 
     $normalized = strtolower(trim($address));
 
-    // Check cache first
+    // Check cache first — skip null-cache only for forced retry addresses
     if (isset($cache[$normalized])) {
         $cached = $cache[$normalized];
+        $isForced = in_array($normalized, $forceAddresses) && $cached['result'] === null;
 
-        // Check if expired (1 year by default)
-        $expirySeconds = CONFIG['cache_expiry_days'] * 86400;
-        if (time() - $cached['timestamp'] < $expirySeconds) {
-            $results[$normalized] = $cached['result'];
-            continue;
+        if (!$isForced) {
+            // Use cache (both successful results and non-forced null results)
+            $expirySeconds = CONFIG['cache_expiry_days'] * 86400;
+            if (time() - $cached['timestamp'] < $expirySeconds) {
+                $results[$normalized] = $cached['result'];
+                continue;
+            }
         }
+        // Fall through: forced null retry, or cache expired
     }
 
     // Geocode with LocationIQ

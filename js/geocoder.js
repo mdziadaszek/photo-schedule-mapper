@@ -27,9 +27,10 @@ export class Geocoder {
   /**
    * Batch geocode multiple addresses (primary method)
    * @param {Array<string>} addresses - Array of addresses to geocode
+   * @param {Array<string>} forceAddresses - Addresses to retry even if previously cached as null
    * @returns {Promise<Object>} Object mapping normalized addresses to {lat, lon, display_name} or null
    */
-  async geocodeBatch(addresses) {
+  async geocodeBatch(addresses, forceAddresses = []) {
     if (!Array.isArray(addresses) || addresses.length === 0) {
       return {};
     }
@@ -40,7 +41,7 @@ export class Geocoder {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ addresses })
+        body: JSON.stringify({ addresses, force_addresses: forceAddresses })
       });
 
       if (!response.ok) {
